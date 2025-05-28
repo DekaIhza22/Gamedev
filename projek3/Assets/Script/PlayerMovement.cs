@@ -15,12 +15,15 @@ public class PlayerMovement : MonoBehaviour
     private SpriteRenderer sprite;
     private PlayerController playerController; // tambahkan PlayerInputActions
 
+    // Untuk input dari button UI
+    private float mobileInputX = 0f;
+
     private Vector2 moveInput;
-    private bool isJumping = false;
+    private bool isjumping = false;
 
-    private enum MovementState { idle, walk, jump, fall, run}
+    private enum MovementState { idle, jump, fall, walk, run}
 
-    [Header("Jump Settings")]
+    [Header("jump Settings")]
     [SerializeField] private LayerMask jumpableGround;
     private BoxCollider2D coll;
 
@@ -41,7 +44,7 @@ public class PlayerMovement : MonoBehaviour
         playerController.Movement.Move.performed += ctx => moveInput = ctx.ReadValue<Vector2>();
         playerController.Movement.Move.canceled += ctx => moveInput = Vector2.zero;
 
-        playerController.Movement.jump.performed += ctx => Jump();
+        playerController.Movement.jump.performed += ctx => jump();
 
         
     }
@@ -53,28 +56,49 @@ public class PlayerMovement : MonoBehaviour
 
     private void Update()
     {
-        moveInput = playerController.Movement.Move.ReadValue<Vector2>();
+        // Jika menggunakan mobile input, pakai itu
+        if (Application.isMobilePlatform)
+        {
+            moveInput = new Vector2(mobileInputX, 0f);
+        }
+        else
+        {
+            // Kalau bukan mobile, pakai Input System
+            moveInput = playerController.Movement.Move.ReadValue<Vector2>();
+        }
 
     }
 
     private void FixedUpdate()
     {
-        //float speed = isRunning ? runSpeed : moveSpeed;
-        Vector2 targetVelocity = new Vector2(moveInput.x * moveSpeed, rb.velocity.y);
+        //gabungan mobile
+        Vector2 targetVelocity = new Vector2((moveInput.x + mobileInputX) * moveSpeed, rb.velocity.y);
         rb.velocity = targetVelocity;
+
         UpdateAnimation();
+
+        // Reset isjumping hanya saat grounded dan velocity Y mendekati 0
+        if (isGrounded() && Mathf.Abs(rb.velocity.y) < 0.01f)
+        {
+            isjumping = false;
+        }
+
     }
 
     private void UpdateAnimation()
     {
         MovementState state;
 
-        if (moveInput.x > 0f)
+        // Gabungkan input dari keyboard dan mobile
+        float horizontal = moveInput.x != 0 ? moveInput.x : mobileInputX;
+
+        // Cek arah jalan
+        if (horizontal > 0f)
         {
             state = MovementState.walk;
             sprite.flipX = false;
         }
-        else if (moveInput.x < 0f)
+        else if (horizontal < 0f)
         {
             state = MovementState.walk;
             sprite.flipX = true;
@@ -84,6 +108,7 @@ public class PlayerMovement : MonoBehaviour
             state = MovementState.idle;
         }
 
+        // Cek apakah sedang lompat atau jatuh
         if (rb.velocity.y > 0.1f)
         {
             state = MovementState.jump;
@@ -96,16 +121,45 @@ public class PlayerMovement : MonoBehaviour
         anim.SetInteger("state", (int)state);
     }
 
+
     private bool isGrounded()
     {
         return Physics2D.BoxCast(coll.bounds.center, coll.bounds.size, 0f, Vector2.down, .1f, jumpableGround);
     }
 
-    private void Jump()
+    private void jump()
     {
+        // Cek ulang grounded saat ini, dan jangan gunakan isjumping (karena bisa delay)
         if (isGrounded())
         {
             rb.velocity = new Vector2(rb.velocity.x, jumpForce);
+            isjumping = true;
+        }
+    }
+
+    // Fungsi ini dipanggil saat tombol kanan ditekan
+    public void MoveRight(bool isPressed)
+    {
+        if (isPressed)
+            mobileInputX = 1f;
+        else if (mobileInputX == 1f)
+            mobileInputX = 0f;
+    }
+
+    public void MoveLeft(bool isPressed)
+    {
+        if (isPressed)
+            mobileInputX = -1f;
+        else if (mobileInputX == -1f)
+            mobileInputX = 0f;
+    }
+
+    // Fungsi ini dipanggil saat tombol lompat ditekan
+    public void Mobilejump()
+    {
+        if (isGrounded())
+        {
+            jump();
         }
     }
 }
